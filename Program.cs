@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc;
 using StackExchange.Redis;
 using WeatherApi.Dto;
 
@@ -13,24 +12,22 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
 var app = builder.Build();
 
 app.MapGet("/weather", async (
-    [FromQuery] string? localizacao, 
-    [FromQuery] string? dataInicial, 
-    [FromQuery] string? dataFinal,
+    [AsParameters] WeatherRequest request,
     IConnectionMultiplexer redisConnection) =>
 {
     try
     {
-        var dataInicialInformada = !string.IsNullOrWhiteSpace(dataInicial);
-        var dataFinalInformada = !string.IsNullOrWhiteSpace(dataFinal);
+        var dataInicialInformada = !string.IsNullOrWhiteSpace(request.DataInicial);
+        var dataFinalInformada = !string.IsNullOrWhiteSpace(request.DataFinal);
         
-        if (string.IsNullOrWhiteSpace(localizacao))
+        if (string.IsNullOrWhiteSpace(request.Localizacao))
             return Results.BadRequest("Localização é obrigatória");
         
         if (!dataInicialInformada && dataFinalInformada)
             return Results.BadRequest("Data inicial é obrigatória quando a data final é informada");
         
         if (dataInicialInformada && !DateTime.TryParseExact(
-                dataInicial,
+                request.DataInicial,
                 "yyyy-MM-dd",
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
@@ -38,7 +35,7 @@ app.MapGet("/weather", async (
             return Results.BadRequest("Data inicial informada é inválida, precisa estar no formato yyyy-MM-dd");
 
         if (dataFinalInformada && !DateTime.TryParseExact(
-                dataFinal,
+                request.DataFinal,
                 "yyyy-MM-dd",
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
@@ -46,21 +43,23 @@ app.MapGet("/weather", async (
             return Results.BadRequest("Data final informada é inválida, precisa estar no formato yyyy-MM-dd");
         
         var db = redisConnection.GetDatabase();
-        var jsonRedis = await db.StringGetAsync(localizacao);
+        var jsonRedis = await db.StringGetAsync(request.Localizacao);
         if (jsonRedis.HasValue)
             return Results.Ok(JsonSerializer.Deserialize<WeatherApiRetorno>(jsonRedis!));
     
         var httpClient = new HttpClient();
         var url = $"{builder.Configuration["WeatherApi:Url"]}";
-        url += $"VisualCrossingWebServices/rest/services/timeline/{localizacao}/{dataInicial}/{dataFinal}?";
-        url += $"key={builder.Configuration["WeatherApi:ApiKey"]}";
+        url += $"VisualCrossingWebServices/rest/services/timeline/{request.Localizacao}";
+        if (dataInicialInformada) url += $"/{request.DataInicial}";
+        if (dataFinalInformada) url += $"/{request.DataFinal}";
+        url += $"?key={builder.Configuration["WeatherApi:ApiKey"]}";
         var retornoApi = await httpClient.GetAsync(url);
         retornoApi.EnsureSuccessStatusCode();
         var conteudo = await retornoApi.Content.ReadAsStringAsync();
         var retornoApiDto = JsonSerializer.Deserialize<WeatherApiRetorno>(conteudo);
     
         var json = JsonSerializer.Serialize(retornoApiDto);
-        await db.StringSetAsync(localizacao, json,  TimeSpan.FromMinutes(5));
+        await db.StringSetAsync(request.Localizacao, json,  TimeSpan.FromMinutes(5));
     
         return Results.Ok(retornoApiDto);
     }
