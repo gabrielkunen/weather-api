@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +20,31 @@ app.MapGet("/weather", async (
 {
     try
     {
+        var dataInicialInformada = !string.IsNullOrWhiteSpace(dataInicial);
+        var dataFinalInformada = !string.IsNullOrWhiteSpace(dataFinal);
+        
+        if (string.IsNullOrWhiteSpace(localizacao))
+            return Results.BadRequest("Localização é obrigatória");
+        
+        if (!dataInicialInformada && dataFinalInformada)
+            return Results.BadRequest("Data inicial é obrigatória quando a data final é informada");
+        
+        if (dataInicialInformada && !DateTime.TryParseExact(
+                dataInicial,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out _))
+            return Results.BadRequest("Data inicial informada é inválida, precisa estar no formato yyyy-MM-dd");
+
+        if (dataFinalInformada && !DateTime.TryParseExact(
+                dataFinal,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out _))
+            return Results.BadRequest("Data final informada é inválida, precisa estar no formato yyyy-MM-dd");
+        
         var db = redisConnection.GetDatabase();
         var jsonRedis = await db.StringGetAsync(localizacao);
         if (jsonRedis.HasValue)
