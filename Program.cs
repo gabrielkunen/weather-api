@@ -17,29 +17,7 @@ app.MapGet("/weather", async (
 {
     try
     {
-        var dataInicialInformada = !string.IsNullOrWhiteSpace(request.DataInicial);
-        var dataFinalInformada = !string.IsNullOrWhiteSpace(request.DataFinal);
-        
-        if (string.IsNullOrWhiteSpace(request.Localizacao))
-            return Results.BadRequest("Localização é obrigatória");
-        
-        if (!dataInicialInformada && dataFinalInformada)
-            return Results.BadRequest("Data inicial é obrigatória quando a data final é informada");
-        
-        if (dataInicialInformada && !DateTime.TryParseExact(
-                request.DataInicial,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out _))
-            return Results.BadRequest("Data inicial informada é inválida, precisa estar no formato yyyy-MM-dd");
-
-        if (dataFinalInformada && !DateTime.TryParseExact(
-                request.DataFinal,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out _))
+        if (!request.Validar().valido)
             return Results.BadRequest("Data final informada é inválida, precisa estar no formato yyyy-MM-dd");
         
         var db = redisConnection.GetDatabase();
@@ -50,8 +28,8 @@ app.MapGet("/weather", async (
         var httpClient = new HttpClient();
         var url = $"{builder.Configuration["WeatherApi:Url"]}";
         url += $"VisualCrossingWebServices/rest/services/timeline/{request.Localizacao}";
-        if (dataInicialInformada) url += $"/{request.DataInicial}";
-        if (dataFinalInformada) url += $"/{request.DataFinal}";
+        if (request.DataInicialInformada()) url += $"/{request.DataInicial}";
+        if (request.DataFinalInformada()) url += $"/{request.DataFinal}";
         url += $"?key={builder.Configuration["WeatherApi:ApiKey"]}";
         var retornoApi = await httpClient.GetAsync(url);
         retornoApi.EnsureSuccessStatusCode();
