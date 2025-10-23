@@ -19,7 +19,7 @@ app.MapGet("/weather", async (
     try
     {
         if (!request.Validar().valido)
-            return Results.BadRequest("Data final informada é inválida, precisa estar no formato yyyy-MM-dd");
+            return Results.BadRequest(request.Validar().mensagem);
         
         var valorSalvoRedis = await cacheService.GetAsync(request.Localizacao!);
         if (!string.IsNullOrWhiteSpace(valorSalvoRedis))
