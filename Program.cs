@@ -1,29 +1,29 @@
-using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using StackExchange.Redis;
+using WeatherApi.Data;
 using WeatherApi.Dto;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var redis = ConnectionMultiplexer.Connect(builder.Configuration["Redis:ConnectionString"]!);
 builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
+builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 
 var app = builder.Build();
 
 app.MapGet("/weather", async (
     [AsParameters] WeatherRequest request,
-    IConnectionMultiplexer redisConnection) =>
+    ICacheService cacheService) =>
 {
     try
     {
         if (!request.Validar().valido)
             return Results.BadRequest("Data final informada é inválida, precisa estar no formato yyyy-MM-dd");
         
-        var db = redisConnection.GetDatabase();
-        var jsonRedis = await db.StringGetAsync(request.Localizacao);
-        if (jsonRedis.HasValue)
-            return Results.Ok(JsonSerializer.Deserialize<WeatherApiRetorno>(jsonRedis!));
+        var valorSalvoRedis = await cacheService.GetAsync(request.Localizacao!);
+        if (!string.IsNullOrWhiteSpace(valorSalvoRedis))
+            return Results.Ok(JsonSerializer.Deserialize<WeatherApiRetorno>(valorSalvoRedis!));
     
         var httpClient = new HttpClient();
         var url = $"{builder.Configuration["WeatherApi:Url"]}";
@@ -36,8 +36,11 @@ app.MapGet("/weather", async (
         var conteudo = await retornoApi.Content.ReadAsStringAsync();
         var retornoApiDto = JsonSerializer.Deserialize<WeatherApiRetorno>(conteudo);
     
-        var json = JsonSerializer.Serialize(retornoApiDto);
-        await db.StringSetAsync(request.Localizacao, json,  TimeSpan.FromMinutes(5));
+        await cacheService.SetAsync(
+            request.Localizacao!, 
+            JsonSerializer.Serialize(retornoApiDto), 
+            TimeSpan.FromMinutes(5)
+            );
     
         return Results.Ok(retornoApiDto);
     }
